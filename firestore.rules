@@ -1,0 +1,173 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap)
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'githubUsername', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'githubUsername', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.uid == request.auth.uid
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && data.githubUsername is string && data.githubUsername.size() >= 1 && data.githubUsername.size() <= 60 && data.githubUsername.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRepoConfig(data) {
+      return data.keys().hasAll([
+          'ownerId',
+          'githubUsername',
+          'repoFullName',
+          'branch',
+          'manifestName',
+          'manifestShortName',
+          'manifestDisplay',
+          'themeColor',
+          'backgroundColor',
+          'dnsDomain',
+          'selectedModuleCount',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId',
+          'githubUsername',
+          'repoFullName',
+          'branch',
+          'manifestName',
+          'manifestShortName',
+          'manifestDisplay',
+          'themeColor',
+          'backgroundColor',
+          'dnsDomain',
+          'selectedModuleCount',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.ownerId == request.auth.uid
+        && data.githubUsername is string && data.githubUsername.size() >= 1 && data.githubUsername.size() <= 60 && data.githubUsername.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.repoFullName is string && data.repoFullName.size() >= 3 && data.repoFullName.size() <= 140 && data.repoFullName.matches('^[a-zA-Z0-9_.\\-]+/[a-zA-Z0-9_.\\-]+$')
+        && data.branch is string && data.branch.size() >= 1 && data.branch.size() <= 80
+        && data.manifestName is string && data.manifestName.size() >= 1 && data.manifestName.size() <= 120
+        && data.manifestShortName is string && data.manifestShortName.size() >= 1 && data.manifestShortName.size() <= 12
+        && data.manifestDisplay is string && data.manifestDisplay.size() == 10 && (data.manifestDisplay == 'standalone' || data.manifestDisplay == 'minimal-ui' || data.manifestDisplay == 'fullscreen')
+        && data.themeColor is string && data.themeColor.size() >= 4 && data.themeColor.size() <= 9 && data.themeColor.matches('^#[0-9a-fA-F]{3,8}$')
+        && data.backgroundColor is string && data.backgroundColor.size() >= 4 && data.backgroundColor.size() <= 9 && data.backgroundColor.matches('^#[0-9a-fA-F]{3,8}$')
+        && data.dnsDomain is string && data.dnsDomain.size() >= 3 && data.dnsDomain.size() <= 120
+        && data.selectedModuleCount is number && data.selectedModuleCount >= 1 && data.selectedModuleCount <= 20
+        && data.status is string && data.status.size() >= 6 && data.status.size() <= 8 && (data.status == 'active' || data.status == 'archived')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // 4. User Profiles Collection (/userProfiles/{userId})
+    match /userProfiles/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false;
+
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && request.auth.uid == userId
+        && existing().uid == request.auth.uid
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'githubUsername', 'updatedAt']);
+
+      allow delete: if isVerifiedUser()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && existing().uid == request.auth.uid;
+    }
+
+    // 5. Saved Repository Configurations Collection (/repoConfigs/{configId})
+    match /repoConfigs/{configId} {
+      allow get: if isSignedIn()
+        && isValidId(configId)
+        && (resource == null || existing().ownerId == request.auth.uid);
+
+      allow list: if isSignedIn()
+        && existing().ownerId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(configId)
+        && isValidRepoConfig(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/userProfiles/$(incoming().ownerId));
+
+      allow update: if isVerifiedUser()
+        && isValidId(configId)
+        && isValidRepoConfig(incoming())
+        && existing().ownerId == request.auth.uid
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && existing().status != 'archived'
+        && (
+          // Action 1: Update configuration details while active
+          (incoming().status == 'active' && incoming().diff(existing()).affectedKeys().hasOnly([
+            'githubUsername',
+            'repoFullName',
+            'branch',
+            'manifestName',
+            'manifestShortName',
+            'manifestDisplay',
+            'themeColor',
+            'backgroundColor',
+            'dnsDomain',
+            'selectedModuleCount',
+            'updatedAt'
+          ]))
+          ||
+          // Action 2: Archive configuration (terminal state transition)
+          (incoming().status == 'archived' && incoming().diff(existing()).affectedKeys().hasOnly([
+            'status',
+            'updatedAt'
+          ]))
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(configId)
+        && existing().ownerId == request.auth.uid;
+    }
+  }
+}

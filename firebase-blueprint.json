@@ -1,0 +1,172 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile linking a Google account with a GitHub handle.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user.",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "githubUsername": {
+          "type": "string",
+          "description": "Linked GitHub account username.",
+          "minLength": 1,
+          "maxLength": 60,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "githubUsername",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RepoConfig": {
+      "title": "RepoConfig",
+      "description": "Saved repository PWA build and manifest configuration owned by a user.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the configuration owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "githubUsername": {
+          "type": "string",
+          "description": "GitHub handle associated with this repository.",
+          "minLength": 1,
+          "maxLength": 60,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "repoFullName": {
+          "type": "string",
+          "description": "Full repository identifier in owner/name format.",
+          "minLength": 3,
+          "maxLength": 140,
+          "pattern": "^[a-zA-Z0-9_.\\-]+/[a-zA-Z0-9_.\\-]+$"
+        },
+        "branch": {
+          "type": "string",
+          "description": "Target Git branch name.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "manifestName": {
+          "type": "string",
+          "description": "Full Web App Manifest name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "manifestShortName": {
+          "type": "string",
+          "description": "Condensed Web App Manifest short_name (max 12 chars).",
+          "minLength": 1,
+          "maxLength": 12
+        },
+        "manifestDisplay": {
+          "type": "string",
+          "description": "PWA display mode.",
+          "enum": ["standalone", "minimal-ui", "fullscreen"],
+          "minLength": 10,
+          "maxLength": 10
+        },
+        "themeColor": {
+          "type": "string",
+          "description": "Hex theme color.",
+          "minLength": 4,
+          "maxLength": 9,
+          "pattern": "^#[0-9a-fA-F]{3,8}$"
+        },
+        "backgroundColor": {
+          "type": "string",
+          "description": "Hex splash background color.",
+          "minLength": 4,
+          "maxLength": 9,
+          "pattern": "^#[0-9a-fA-F]{3,8}$"
+        },
+        "dnsDomain": {
+          "type": "string",
+          "description": "Associated origin domain inspected via DoH.",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "selectedModuleCount": {
+          "type": "number",
+          "description": "Count of bundled webview modules (1 to 20)."
+        },
+        "status": {
+          "type": "string",
+          "description": "Lifecycle state of the configuration.",
+          "enum": ["active", "archived"],
+          "minLength": 6,
+          "maxLength": 8
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated."
+        }
+      },
+      "required": [
+        "ownerId",
+        "githubUsername",
+        "repoFullName",
+        "branch",
+        "manifestName",
+        "manifestShortName",
+        "manifestDisplay",
+        "themeColor",
+        "backgroundColor",
+        "dnsDomain",
+        "selectedModuleCount",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/userProfiles/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Stores the authenticated user's GitHub-linked profile metadata."
+    },
+    "/repoConfigs/{configId}": {
+      "schema": {
+        "$ref": "#/entities/RepoConfig"
+      },
+      "description": "Stores saved repository PWA configurations owned by authenticated users."
+    }
+  }
+}
